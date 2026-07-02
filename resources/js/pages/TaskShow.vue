@@ -157,6 +157,52 @@
           </div>
         </div>
       </div>
+
+      <!-- Activity log card -->
+      <div class="mt-6 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <h2 class="text-lg font-semibold text-gray-800 mb-4">Activity Log</h2>
+        <div class="flow-root">
+          <ul role="list" class="-mb-8">
+            <li v-for="(activity, activityIdx) in task.activities" :key="activity.id">
+              <div class="relative pb-8">
+                <span v-if="activityIdx !== task.activities.length - 1" class="absolute top-4 left-4 -ml-px h-full w-0.5 bg-gray-200" aria-hidden="true"></span>
+                <div class="relative flex space-x-3">
+                  <div>
+                    <span class="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center ring-8 ring-white">
+                      <svg v-if="activity.event === 'created'" class="h-5 w-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <svg v-else-if="activity.event === 'updated'" class="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 8H18" />
+                      </svg>
+                      <svg v-else-if="activity.event === 'comment_added'" class="h-5 w-5 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                      </svg>
+                      <svg v-else class="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                      </svg>
+                    </span>
+                  </div>
+                  <div class="flex-1 min-w-0 pt-1.5 flex justify-between space-x-4">
+                    <div>
+                      <p class="text-sm text-gray-600">
+                        <span class="font-medium text-gray-900">{{ activity.user?.name ?? 'Unknown user' }}</span>
+                        {{ ' ' }}{{ activity.description }}
+                      </p>
+                    </div>
+                    <div class="text-right text-xs whitespace-nowrap text-gray-400">
+                      {{ formatDateTime(activity.created_at) }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </li>
+          </ul>
+        </div>
+        <div v-if="!task.activities || task.activities.length === 0" class="text-center py-6 text-sm text-gray-400 border border-dashed border-gray-200 rounded-lg">
+          No activity logs recorded.
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -204,6 +250,7 @@ const fetchTask = async () => {
     task.value = {
       ...response.data,
       comments: response.data.comments ?? [],
+      activities: response.data.activities ?? [],
     };
   } catch (err) {
     console.error('Failed to fetch task:', err);
@@ -260,6 +307,22 @@ const submitComment = async () => {
   try {
     const response = await api.post(`/tasks/${task.value.id}/comments`, commentForm.value);
     upsertComment(response.data);
+
+    if (task.value.activities) {
+      task.value.activities = [
+        {
+          id: `temp-activity-own-${Date.now()}`,
+          task_id: response.data.task_id,
+          user_id: response.data.user_id,
+          event: 'comment_added',
+          description: 'added a comment',
+          user: response.data.user,
+          created_at: response.data.created_at,
+        },
+        ...task.value.activities,
+      ];
+    }
+
     commentForm.value.body = '';
   } catch (err) {
     commentFieldError.value = err.response?.data?.errors?.body?.[0] ?? '';
@@ -284,6 +347,26 @@ const subscribeToComments = () => {
 
       upsertComment(event.comment);
 
+      if (task.value.activities) {
+        const activityExists = task.value.activities.some(
+          (a) => a.event === 'comment_added' && a.created_at === event.comment.created_at && a.user_id === event.comment.user_id
+        );
+        if (!activityExists) {
+          task.value.activities = [
+            {
+              id: `temp-activity-${Date.now()}`,
+              task_id: event.comment.task_id,
+              user_id: event.comment.user_id,
+              event: 'comment_added',
+              description: 'added a comment',
+              user: event.comment.user,
+              created_at: event.comment.created_at,
+            },
+            ...task.value.activities,
+          ];
+        }
+      }
+
       if (event.comment.user_id !== currentUser.value?.id) {
         showNotification(event.message ?? `${event.comment.user?.name ?? 'Someone'} commented on ${task.value.name}.`);
       }
@@ -292,7 +375,7 @@ const subscribeToComments = () => {
 
 const unsubscribeFromComments = () => {
   if (task.value?.id && echo) {
-    echo.leave(`private-tasks.${task.value.id}`);
+    echo.leave(`tasks.${task.value.id}`);
   }
 };
 

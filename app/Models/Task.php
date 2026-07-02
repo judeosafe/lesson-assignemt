@@ -33,4 +33,60 @@ class Task extends Model
     {
         return $this->hasMany(Comment::class)->oldest();
     }
+
+    public function activities(): HasMany
+    {
+        return $this->hasMany(Activity::class)->latest();
+    }
+
+    protected static function booted(): void
+    {
+        static::created(function (Task $task) {
+            $task->activities()->create([
+                'user_id' => auth()->id() ?? $task->user_id,
+                'event' => 'created',
+                'description' => 'created the task',
+            ]);
+        });
+
+        static::updating(function (Task $task) {
+            $changes = [];
+
+            if ($task->isDirty('status')) {
+                $statusMap = ['todo' => 'To Do', 'in_progress' => 'In Progress', 'done' => 'Done'];
+                $newStatus = $statusMap[$task->status] ?? $task->status;
+                $changes[] = "status to \"{$newStatus}\"";
+            }
+            if ($task->isDirty('priority')) {
+                $changes[] = "priority to \"{$task->priority}\"";
+            }
+            if ($task->isDirty('name')) {
+                $changes[] = "name to \"{$task->name}\"";
+            }
+            if ($task->isDirty('description')) {
+                $changes[] = 'description';
+            }
+            if ($task->isDirty('due_date')) {
+                $formattedDate = $task->due_date ? $task->due_date->format('Y-m-d') : 'none';
+                $changes[] = "due date to \"{$formattedDate}\"";
+            }
+
+            if (!empty($changes)) {
+                $description = 'changed ' . implode(', ', $changes);
+                $task->activities()->create([
+                    'user_id' => auth()->id() ?? $task->user_id,
+                    'event' => 'updated',
+                    'description' => $description,
+                ]);
+            }
+        });
+
+        static::deleting(function (Task $task) {
+            $task->activities()->create([
+                'user_id' => auth()->id() ?? $task->user_id,
+                'event' => 'deleted',
+                'description' => 'deleted the task',
+            ]);
+        });
+    }
 }

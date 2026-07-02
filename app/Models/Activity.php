@@ -6,14 +6,15 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class Comment extends Model
+class Activity extends Model
 {
     use HasFactory;
 
     protected $fillable = [
         'task_id',
         'user_id',
-        'body',
+        'event',
+        'description',
     ];
 
     public function task(): BelongsTo
@@ -24,16 +25,5 @@ class Comment extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
-    }
-
-    protected static function booted(): void
-    {
-        static::created(function (Comment $comment) {
-            $comment->task->activities()->create([
-                'user_id' => auth()->id() ?? $comment->user_id,
-                'event' => 'comment_added',
-                'description' => 'added a comment',
-            ]);
-        });
     }
 }

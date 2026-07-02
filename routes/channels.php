@@ -10,5 +10,5 @@ Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
 });
 
 Broadcast::channel('tasks.{taskId}', function ($user, $taskId) {
-    return Task::whereKey($taskId)->exists();
+    return Task::whereKey($taskId)->where('user_id', $user->id)->exists();
 });

@@ -61,7 +61,9 @@ class TaskController extends Controller
      */
     public function show(Request $request, Task $task)
     {
-        $task->load('comments.user');
+        $this->ensureTaskOwner($request, $task);
+
+        $task->load(['comments.user', 'activities.user']);
 
         return response()->json($task);
     }
